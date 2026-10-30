@@ -1,0 +1,385 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>TrustShield Prototype</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Noto+Sans+Devanagari:wght@400;600&family=Noto+Sans+Tamil:wght@400;600&family=Noto+Sans+Telugu:wght@400;600&display=swap">
+<style>
+/* Layout: a working phone on the left, a live "under the hood" panel on the right that shows
+   the 4-step pipeline (capture, analyse, score, alert) and the weighted signals of the last scan. */
+:root{
+  --bg:#e9edf1; --surface:#ffffff; --surface2:#f3f6f9; --ink:#0e1a2b; --muted:#566476; --line:#d6dde5;
+  --accent:#0a7c78; --accent-ink:#ffffff; --danger:#c4261d; --warn:#a85f00; --ok:#1a7a43; --bezel:#101a28;
+  --f-display:'Bricolage Grotesque','IBM Plex Sans',system-ui,sans-serif;
+  --f-body:'IBM Plex Sans','Noto Sans Devanagari','Noto Sans Tamil','Noto Sans Telugu',system-ui,sans-serif;
+  --f-mono:'IBM Plex Mono',ui-monospace,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#080e15; --surface:#121b26; --surface2:#182331; --ink:#e8eef5; --muted:#93a1b2; --line:#26354a;
+  --accent:#3cc9bf; --accent-ink:#06201f; --danger:#ff7468; --warn:#f2a640; --ok:#52c882; --bezel:#223045; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#080e15; --surface:#121b26; --surface2:#182331; --ink:#e8eef5; --muted:#93a1b2; --line:#26354a;
+  --accent:#3cc9bf; --accent-ink:#06201f; --danger:#ff7468; --warn:#f2a640; --ok:#52c882; --bezel:#223045; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.45;
+  padding-block:28px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+button{font:inherit;color:inherit;cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.wrap{max-width:1040px;margin:0 auto;display:grid;grid-template-columns:minmax(0,400px) minmax(0,1fr);gap:40px;align-items:start;justify-content:center}
+.eyebrow{font-family:var(--f-mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+
+/* phone */
+.phone{width:100%;max-width:400px;height:800px;background:var(--surface);border:10px solid var(--bezel);border-radius:46px;
+  position:relative;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 24px 60px -24px rgba(8,20,40,.45)}
+.top{display:flex;align-items:center;justify-content:space-between;padding:16px 18px 10px;gap:10px}
+.logo{display:flex;align-items:center;gap:8px;font-family:var(--f-display);font-weight:800;font-size:20px;letter-spacing:-.01em}
+.logo svg{width:24px;height:24px}
+select{font:inherit;background:var(--surface2);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:5px 8px}
+.scr{flex:1;overflow-y:auto;padding:4px 18px 18px;min-height:0}
+.tabs{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--line);background:var(--surface)}
+.tabs button{background:none;border:0;padding:10px 4px 12px;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;color:var(--muted);font-weight:500}
+.tabs button svg{width:22px;height:22px}
+.tabs button[aria-selected="true"]{color:var(--accent)}
+h2{font-family:var(--f-display);font-weight:800;font-size:24px;line-height:1.1;margin:6px 0 4px;letter-spacing:-.015em;text-wrap:balance}
+.sub{color:var(--muted);margin:0 0 14px}
+.panel{display:none}.panel.on{display:block}
+
+.hero{background:var(--surface2);border:1px solid var(--line);border-radius:18px;padding:16px;display:flex;gap:14px;align-items:center}
+.hero b{font-family:var(--f-display);font-size:17px;display:block}
+.pulse{width:10px;height:10px;border-radius:50%;background:var(--ok);display:inline-block;margin-right:6px;box-shadow:0 0 0 0 var(--ok);animation:p 2s infinite}
+@keyframes p{70%{box-shadow:0 0 0 8px transparent}100%{box-shadow:0 0 0 0 transparent}}
+@media (prefers-reduced-motion:reduce){.pulse{animation:none}*{transition:none!important}}
+.cta{width:100%;margin:12px 0;background:var(--accent);color:var(--accent-ink);border:0;border-radius:14px;padding:14px;font-weight:600;font-size:15px}
+.shields{display:grid;gap:8px;margin:0 0 14px}
+.shield{display:flex;gap:12px;align-items:center;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px}
+.shield svg{width:28px;height:28px;color:var(--accent);flex:none}
+.shield b{display:block}.shield span{color:var(--muted);font-size:12.5px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
+.stats div{background:var(--surface2);border-radius:12px;padding:10px;text-align:center}
+.stats b{font-family:var(--f-display);font-size:22px;display:block;font-variant-numeric:tabular-nums}
+.stats span{font-size:11px;color:var(--muted)}
+.log{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.log li{display:flex;justify-content:space-between;gap:10px;padding:9px 11px;border:1px solid var(--line);border-radius:10px;font-size:13px}
+.log .empty{color:var(--muted);border-style:dashed}
+.pill{font-family:var(--f-mono);font-size:11px;font-weight:500;padding:2px 8px;border-radius:99px;white-space:nowrap;align-self:center;
+  color:var(--c);background:color-mix(in srgb,var(--c) 14%,transparent)}
+.v-block{--c:var(--danger)}.v-warn{--c:var(--warn)}.v-allow{--c:var(--ok)}
+
+/* forms */
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.chip{background:var(--surface2);border:1px solid var(--line);border-radius:99px;padding:6px 11px;font-size:12.5px}
+.chip[aria-pressed="true"]{border-color:var(--accent);color:var(--accent);font-weight:600}
+label{display:block;font-size:12px;color:var(--muted);margin:10px 0 4px;font-weight:500}
+input[type=text],input[type=number],textarea{width:100%;font:inherit;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:10px}
+textarea{min-height:92px;resize:vertical}
+.row{display:flex;gap:10px}.row>*{flex:1;min-width:0}
+.seg{display:flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.seg button{flex:1;border:0;background:var(--surface);padding:9px}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);font-weight:600}
+.chk{display:flex;gap:8px;align-items:center;margin:12px 0;color:var(--ink);font-size:13px}
+.btn{background:var(--accent);color:var(--accent-ink);border:0;border-radius:12px;padding:12px 16px;font-weight:600;width:100%;margin-top:6px}
+.btn.alt{background:var(--surface2);color:var(--ink);border:1px solid var(--line)}
+.btn.bad{background:var(--danger);color:#fff}
+.btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+
+/* voice */
+.call{background:var(--surface2);border:1px solid var(--line);border-radius:16px;padding:12px;margin-bottom:12px}
+canvas{width:100%;height:70px;display:block}
+.tr{font-size:13px;color:var(--muted);margin:6px 0 0;font-style:italic}
+.feat{display:grid;gap:6px;margin-top:10px;font-size:12px}
+.feat div{display:grid;grid-template-columns:96px 1fr 34px;gap:8px;align-items:center;font-family:var(--f-mono)}
+.bar{height:6px;background:var(--line);border-radius:4px;overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .5s}
+
+/* verdict */
+.verdict{margin-top:14px;border:1px solid var(--line);border-radius:18px;padding:14px;background:var(--surface);border-top:4px solid var(--c)}
+.vhead{display:flex;gap:14px;align-items:center}
+.ring{position:relative;width:84px;height:84px;flex:none}
+.ring svg{width:84px;height:84px;transform:rotate(-90deg)}
+.ring circle{fill:none;stroke-width:9}
+.ring .bg{stroke:var(--line)}
+.ring .fg{stroke:var(--c);stroke-linecap:round;transition:stroke-dashoffset .7s}
+.ring b{position:absolute;inset:0;display:grid;place-items:center;font-family:var(--f-display);font-size:26px;font-variant-numeric:tabular-nums}
+.ring b small{display:block;font:400 9px var(--f-mono);color:var(--muted);text-align:center;margin-top:-6px}
+.vlabel{font-family:var(--f-display);font-weight:800;font-size:19px;color:var(--c);letter-spacing:.02em}
+.why{margin:12px 0 0;padding:0;list-style:none;display:grid;gap:7px}
+.why li{display:flex;gap:8px;font-size:13.5px}
+.why li::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--c);margin-top:7px;flex:none}
+.done{margin-top:10px;padding:10px;border-radius:10px;background:color-mix(in srgb,var(--ok) 14%,transparent);color:var(--ok);font-weight:600;font-size:13px}
+.listen{background:none;border:0;color:var(--accent);padding:0;font-size:12.5px;font-weight:600;margin-top:10px}
+.report{margin-top:10px;background:var(--surface2);border:1px dashed var(--line);border-radius:12px;padding:12px;font-family:var(--f-mono);font-size:12px;white-space:pre-wrap}
+.report a{color:var(--accent)}
+
+/* under the hood */
+.hood h1{font-family:var(--f-display);font-weight:800;font-size:clamp(30px,4.4vw,44px);line-height:1.02;margin:6px 0 10px;letter-spacing:-.02em;text-wrap:balance}
+.hood .lead{color:var(--muted);max-width:54ch;margin:0 0 22px;font-size:15px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:14px}
+.pipe{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px}
+.pipe div{border:1px solid var(--line);border-radius:10px;padding:9px 10px;font-size:12.5px;color:var(--muted);transition:all .25s}
+.pipe div b{display:block;font-family:var(--f-display);color:var(--ink);font-size:14px}
+.pipe div.lit{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--ink)}
+.zone{position:relative;height:12px;border-radius:6px;margin:30px 0 6px;background:linear-gradient(90deg,var(--danger) 0 40%,var(--warn) 40% 70%,var(--ok) 70% 100%);opacity:.85}
+.zone i{position:absolute;top:-22px;transform:translateX(-50%);font:500 11px var(--f-mono);transition:left .6s;padding:1px 6px;background:var(--ink);color:var(--bg);border-radius:6px}
+.zone i::after{content:"";position:absolute;left:50%;bottom:-5px;margin-left:-4px;border:4px solid transparent;border-top-color:var(--ink);border-bottom:0}
+.zl{display:flex;font:400 11px var(--f-mono);color:var(--muted)}.zl span:nth-child(1){width:40%}.zl span:nth-child(2){width:30%}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{font:500 11px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);text-align:left;padding:6px 0;border-bottom:1px solid var(--line)}
+td{padding:7px 0;border-bottom:1px solid var(--line)}
+td:last-child,th:last-child{text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.meta{display:flex;flex-wrap:wrap;gap:6px 18px;font:400 12px var(--f-mono);color:var(--muted);margin-top:10px}
+.note{font-size:12.5px;color:var(--muted)}
+.toast{position:absolute;left:50%;bottom:84px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 14px;border-radius:99px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .2s;white-space:nowrap}
+.toast.on{opacity:1}
+@media (max-width:880px){.wrap{grid-template-columns:minmax(0,1fr);gap:24px}.phone{margin:0 auto}}
+@media (max-width:480px){body{padding-block:0}.phone{border:0;border-radius:0;height:calc(100dvh - 20px);min-height:640px}.pipe{grid-template-columns:1fr 1fr}}
+</style>
+
+<div class="wrap">
+<main class="phone" aria-label="TrustShield app prototype">
+  <div class="top">
+    <div class="logo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 4 5v6c0 5 3.4 9.3 8 11 4.6-1.7 8-6 8-11V5l-8-3Z" fill="var(--accent)"/><path d="m8.5 12 2.5 2.5 4.5-5" fill="none" stroke="var(--accent-ink)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>TrustShield</div>
+    <select id="lang" aria-label="Alert language"><option value="en">English</option><option value="hi">हिन्दी</option><option value="ta">தமிழ்</option><option value="te">తెలుగు</option></select>
+  </div>
+
+  <div class="scr">
+    <section class="panel on" id="p-home">
+      <h2>You are protected</h2>
+      <p class="sub">Three shields watch calls, payments and links. One trust score decides what happens next.</p>
+      <div class="hero"><span class="pulse"></span><div><b>All shields active</b><span class="note">Scoring runs on this device.</span></div></div>
+      <button class="cta" id="demo">Run demo: a Rs 4,999 refund request</button>
+      <div class="shields">
+        <button class="shield" data-go="voice"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 10v4M8 6v12M12 3v18M16 7v10M20 10v4"/></svg><div><b>Voice Shield</b><span>Checks calls and voice notes for cloned speech</span></div></button>
+        <button class="shield" data-go="upi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18M7 15h4"/></svg><div><b>UPI Risk Engine</b><span>Scores a payee and request before you pay</span></div></button>
+        <button class="shield" data-go="link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg><div><b>Phishing Guard</b><span>Scans SMS and WhatsApp links before you open them</span></div></button>
+      </div>
+      <div class="stats"><div><b id="n-scan">0</b><span>Scanned</span></div><div><b id="n-flag">0</b><span>Flagged</span></div><div><b id="n-block">0</b><span>Blocked</span></div></div>
+      <ul class="log" id="log"><li class="empty">No scans yet. Try the demo above.</li></ul>
+    </section>
+
+    <section class="panel" id="p-upi">
+      <h2>UPI Risk Engine</h2>
+      <p class="sub">Pick a request or edit the details, then check it before you tap pay.</p>
+      <div class="chips" id="upi-presets"></div>
+      <label for="vpa">Payee UPI ID</label><input type="text" id="vpa" autocomplete="off">
+      <div class="row"><div><label for="amt">Amount (Rs)</label><input type="number" id="amt" min="0"></div>
+        <div><label id="ty-l">Request type</label><div class="seg" role="group" aria-labelledby="ty-l"><button id="ty-pay" aria-pressed="false">Pay</button><button id="ty-col" aria-pressed="true">Collect</button></div></div></div>
+      <label for="note">Note from payee</label><input type="text" id="note" autocomplete="off">
+      <label class="chk"><input type="checkbox" id="known"> Payee is in my contacts</label>
+      <button class="btn" id="upi-go">Check request</button>
+      <div id="upi-out"></div>
+    </section>
+
+    <section class="panel" id="p-voice">
+      <h2>Voice Shield</h2>
+      <p class="sub">Pick a sample call. In the app this runs on live calls and voice notes.</p>
+      <div class="chips" id="voice-presets"></div>
+      <div class="call"><canvas id="wave" width="640" height="140" aria-label="Audio waveform"></canvas><p class="tr" id="tr"></p>
+        <div class="feat" id="feat"></div></div>
+      <button class="btn" id="voice-go">Analyse audio</button>
+      <div id="voice-out"></div>
+    </section>
+
+    <section class="panel" id="p-link">
+      <h2>Phishing Guard</h2>
+      <p class="sub">Paste a message or link. The guard reads the text and the web address.</p>
+      <div class="chips" id="link-presets"></div>
+      <label for="msg">SMS or WhatsApp message</label><textarea id="msg"></textarea>
+      <button class="btn" id="link-go">Scan message</button>
+      <div id="link-out"></div>
+    </section>
+  </div>
+  <nav class="tabs" role="tablist" aria-label="Sections">
+    <button role="tab" data-tab="home" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 2 4 5v6c0 5 3.4 9.3 8 11 4.6-1.7 8-6 8-11V5l-8-3Z"/></svg>Home</button>
+    <button role="tab" data-tab="voice" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 10v4M8 6v12M12 3v18M16 7v10M20 10v4"/></svg>Voice</button>
+    <button role="tab" data-tab="upi" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18"/></svg>UPI</button>
+    <button role="tab" data-tab="link" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>Links</button>
+  </nav>
+  <div class="toast" id="toast" role="status"></div>
+</main>
+
+<aside class="hood">
+  <div class="eyebrow">Team Quantum Quills · Hackathon 2k26 · Security</div>
+  <h1>Every scan, shown step by step</h1>
+  <p class="lead">This is a working prototype of TrustShield. Run any shield on the phone and watch the pipeline, the trust score and the weighted signals update here.</p>
+  <div class="card">
+    <div class="eyebrow">Pipeline</div>
+    <div class="pipe" id="pipe"><div><b>Capture</b>Request or message</div><div><b>Analyse</b>Signals extracted</div><div><b>Score</b>0 to 100</div><div><b>Alert</b>Your language</div></div>
+  </div>
+  <div class="card">
+    <div class="eyebrow">Trust score decides the action</div>
+    <div class="zone"><i id="mark" style="left:50%">--</i></div>
+    <div class="zl"><span>0-40 block</span><span>40-70 warn</span><span>70-100 allow</span></div>
+  </div>
+  <div class="card">
+    <div class="eyebrow">Signals in the last scan</div>
+    <table><thead><tr><th>Signal</th><th>Effect</th></tr></thead><tbody id="sig"><tr><td colspan="2" class="note">Nothing scanned yet.</td></tr></tbody></table>
+    <div class="meta"><span id="m-lat">latency: --</span><span id="m-model">engine: --</span></div>
+  </div>
+  <p class="note">Prototype scope: scoring uses transparent rules and canned audio samples to show the flow. The planned production models are Wav2Vec2 (voice), XGBoost (payments) and DistilBERT (text), with Android listeners, FastAPI, Redis and push alerts.</p>
+</aside>
+</div>
+
+<script>
+(function(){
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+let silent=false,lang='en', stats={scan:0,flag:0,block:0}, logItems=[], last=null;
+
+/* ---------- translations ---------- */
+const T={
+ en:{ver:{block:'HIGH RISK',warn:'BE CAREFUL',allow:'LOOKS SAFE'},block:'Block',report:'Report to 1930',go:'Proceed anyway',listen:'Listen',
+  blocked:'Blocked. Your money stays in your account.',head:{block:'Do not proceed',warn:'Check before you continue',allow:'No problem found'},
+  r:{collect:"It is a collect request: approving it takes money out of your account.",unknown:"The payee is not in your contacts.",keyword:"It uses bait words like refund, prize, KYC or fee.",amount:"The amount is higher than a typical first payment.",vpa:"The UPI ID contains a long random number string.",lookalike:"The link imitates a real bank or payment brand.",shortener:"A shortened link hides the real destination.",urgency:"It pressures you to act immediately.",nohttps:"The site is not encrypted (no HTTPS).",tld:"The domain ending is common in scams.",synth:"The voice shows signs of being AI-generated.",safe:"No risk signals found."}},
+ hi:{ver:{block:'अधिक जोखिम',warn:'सावधान',allow:'सुरक्षित'},block:'ब्लॉक करें',report:'1930 पर रिपोर्ट करें',go:'फिर भी आगे बढ़ें',listen:'सुनें',
+  blocked:'ब्लॉक हो गया। आपके खाते से पैसे नहीं कटेंगे।',head:{block:'आगे न बढ़ें',warn:'आगे बढ़ने से पहले जाँचें',allow:'कोई समस्या नहीं मिली'},
+  r:{collect:"यह कलेक्ट अनुरोध है: मंज़ूर करने पर आपके खाते से पैसे कटेंगे।",unknown:"भुगतानकर्ता आपके संपर्कों में नहीं है।",keyword:"इसमें रिफंड, इनाम, KYC या फीस जैसे लालच के शब्द हैं।",amount:"राशि सामान्य पहले भुगतान से अधिक है।",vpa:"UPI ID में अंकों की लंबी अजीब श्रृंखला है।",lookalike:"लिंक असली बैंक या पेमेंट ब्रांड की नकल करता है।",shortener:"छोटा किया हुआ लिंक असली पता छिपाता है।",urgency:"यह आप पर तुरंत कार्रवाई का दबाव बनाता है।",nohttps:"वेबसाइट सुरक्षित (HTTPS) नहीं है।",tld:"यह डोमेन अंत ठगी में अक्सर दिखता है।",synth:"आवाज़ में AI से बनी होने के संकेत हैं।",safe:"कोई जोखिम संकेत नहीं मिला।"}},
+ ta:{ver:{block:'அதிக ஆபத்து',warn:'எச்சரிக்கை',allow:'பாதுகாப்பானது'},block:'தடு',report:'1930-க்கு புகார்',go:'இருந்தாலும் தொடர்',listen:'கேளுங்கள்',
+  blocked:'தடுக்கப்பட்டது. உங்கள் கணக்கிலிருந்து பணம் போகாது.',head:{block:'தொடர வேண்டாம்',warn:'தொடரும் முன் சரிபாருங்கள்',allow:'பிரச்சினை இல்லை'},
+  r:{collect:"இது பணம் கேட்கும் கோரிக்கை; ஏற்றால் உங்கள் கணக்கிலிருந்து பணம் போகும்.",unknown:"பணம் கேட்பவர் உங்கள் தொடர்புகளில் இல்லை.",keyword:"ரீஃபண்ட், பரிசு, KYC, கட்டணம் போன்ற ஆசை காட்டும் சொற்கள் உள்ளன.",amount:"தொகை வழக்கமான முதல் பணம் செலுத்தலை விட அதிகம்.",vpa:"UPI ஐடியில் நீண்ட தற்செயல் எண்கள் உள்ளன.",lookalike:"இணைப்பு உண்மையான வங்கி அல்லது பேமெண்ட் பிராண்டை போலி செய்கிறது.",shortener:"சுருக்கிய இணைப்பு உண்மையான முகவரியை மறைக்கிறது.",urgency:"உடனே செயல்பட உங்களை நெருக்குகிறது.",nohttps:"தளம் பாதுகாப்பானது (HTTPS) அல்ல.",tld:"இந்த டொமைன் முடிவு மோசடிகளில் அடிக்கடி வருகிறது.",synth:"குரல் AI மூலம் உருவாக்கப்பட்டதற்கான அறிகுறிகள் உள்ளன.",safe:"ஆபத்து அறிகுறி எதுவும் இல்லை."}},
+ te:{ver:{block:'అధిక ప్రమాదం',warn:'జాగ్రత్త',allow:'సురక్షితం'},block:'బ్లాక్ చేయండి',report:'1930కి ఫిర్యాదు',go:'అయినా కొనసాగండి',listen:'వినండి',
+  blocked:'బ్లాక్ అయింది. మీ ఖాతా నుంచి డబ్బు పోదు.',head:{block:'కొనసాగవద్దు',warn:'కొనసాగే ముందు చూసుకోండి',allow:'సమస్య కనిపించలేదు'},
+  r:{collect:"ఇది డబ్బు అడిగే అభ్యర్థన; ఆమోదిస్తే మీ ఖాతా నుంచి డబ్బు పోతుంది.",unknown:"చెల్లింపుదారు మీ కాంటాక్ట్‌లలో లేరు.",keyword:"రీఫండ్, బహుమతి, KYC, ఫీజు వంటి ఆశ చూపే పదాలు ఉన్నాయి.",amount:"మొత్తం సాధారణ మొదటి చెల్లింపు కంటే ఎక్కువ.",vpa:"UPI ఐడీలో పొడవైన యాదృచ్ఛిక అంకెలు ఉన్నాయి.",lookalike:"లింక్ నిజమైన బ్యాంక్ లేదా పేమెంట్ బ్రాండ్‌ను అనుకరిస్తోంది.",shortener:"చిన్న చేసిన లింక్ అసలు చిరునామాను దాచిపెడుతుంది.",urgency:"వెంటనే చర్య తీసుకోమని ఒత్తిడి చేస్తోంది.",nohttps:"సైట్ సురక్షితం (HTTPS) కాదు.",tld:"ఈ డొమైన్ ముగింపు మోసాల్లో తరచూ కనిపిస్తుంది.",synth:"గొంతు AI తయారీ సంకేతాలు చూపిస్తోంది.",safe:"ప్రమాద సంకేతాలు ఏవీ కనిపించలేదు."}}
+};
+const SIGLABEL={collect:'Collect request',unknown:'Unknown payee',keyword:'Bait keywords',amount:'High amount',vpa:'Random UPI ID',lookalike:'Look-alike brand domain',shortener:'URL shortener',urgency:'Urgency pressure',nohttps:'No HTTPS',tld:'Risky domain ending',synth:'Synthetic voice'};
+const verdictOf=s=>s<40?'block':s<70?'warn':'allow';
+
+/* ---------- scoring engines (transparent rules) ---------- */
+function scoreUPI(d){
+  const sg=[];
+  if(d.type==='collect') sg.push(['collect',-20]);
+  if(!d.known) sg.push(['unknown',-20]);
+  if(/refund|prize|cashback|reward|lottery|kyc|winner|gift/i.test(d.note)) sg.push(['keyword',-25]);
+  if(d.amount>=2000) sg.push(['amount',-10]);
+  if(/\d{5,}/.test(d.vpa)) sg.push(['vpa',-7]);
+  return fin(sg,'UPI Risk Engine · rules (XGBoost planned)');
+}
+const BRANDS={sbi:['sbi.co.in','onlinesbi.sbi'],hdfc:['hdfcbank.com'],icici:['icicibank.com'],axis:['axisbank.com'],paytm:['paytm.com'],phonepe:['phonepe.com'],npci:['npci.org.in'],amazon:['amazon.in','amazon.com']};
+function scorePhish(text){
+  const sg=[]; const m=text.match(/(https?:\/\/[^\s]+|\b[\w-]+(?:\.[\w-]+)*\.(?:com|in|xyz|top|click|link|info|icu|net|org|ly)\b[^\s]*)/i);
+  if(m){
+    const url=m[0], host=url.replace(/^https?:\/\//i,'').split(/[\/?#]/)[0].toLowerCase();
+    if(/^(bit\.ly|tinyurl\.com|t\.co|cutt\.ly|rb\.gy|is\.gd)$/.test(host)) sg.push(['shortener',-25]);
+    for(const b in BRANDS){ if(host.includes(b) && !BRANDS[b].some(d=>host===d||host.endsWith('.'+d))){ sg.push(['lookalike',-35]); break; } }
+    if(/^http:\/\//i.test(url)) sg.push(['nohttps',-10]);
+    if(/\.(xyz|top|click|link|info|icu)$/.test(host)) sg.push(['tld',-15]);
+  }
+  if(/urgent|immediately|today|within 24|blocked|suspended|expire|last chance/i.test(text)) sg.push(['urgency',-15]);
+  if(/kyc|otp|prize|lottery|claim|fee|pay now/i.test(text)) sg.push(['keyword',-15]);
+  return fin(sg,'Phishing Guard · URL + text rules (DistilBERT planned)');
+}
+function fin(sg,engine){ let s=100; sg.forEach(x=>s+=x[1]); return {score:Math.max(0,Math.min(100,s)),sg,engine}; }
+
+/* ---------- rendering ---------- */
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function render(el,res,ctx){
+  const v=verdictOf(res.score), tt=T[lang], C=2*Math.PI*36, off=C*(1-res.score/100);
+  const codes=res.sg.length?res.sg.map(x=>x[0]):['safe'];
+  el.innerHTML=`<div class="verdict v-${v}" aria-live="polite">
+   <div class="vhead"><div class="ring"><svg viewBox="0 0 84 84"><circle class="bg" cx="42" cy="42" r="36"/><circle class="fg" cx="42" cy="42" r="36" stroke-dasharray="${C}" stroke-dashoffset="${C}"/></svg><b>${res.score}<small>/100</small></b></div>
+   <div><div class="vlabel">${tt.ver[v]}</div><div>${tt.head[v]}</div></div></div>
+   <ul class="why">${codes.map(c=>`<li>${esc(tt.r[c])}</li>`).join('')}</ul>
+   ${v!=='allow'?`<button class="listen" type="button">${tt.listen}</button><div class="btns"><button class="btn bad" data-a="block">${tt.block}</button><button class="btn alt" data-a="report">${tt.report}</button></div><button class="btn alt" data-a="go">${tt.go}</button>`:''}
+   <div class="slot"></div></div>`;
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{const f=el.querySelector('.fg'); if(f) f.style.strokeDashoffset=off;}));
+  const slot=el.querySelector('.slot');
+  el.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>{
+    const a=b.dataset.a;
+    if(a==='block'){ slot.innerHTML=`<div class="done">${esc(tt.blocked)}</div>`; stats.block++; updStats(); toast('Request blocked'); }
+    if(a==='go'){ slot.innerHTML=`<p class="note">Proceed is allowed, and the choice is logged.</p>`; }
+    if(a==='report'){
+      const txt=`National Cyber Crime Helpline: 1930\nIncident: ${ctx.kind}\nDetail: ${ctx.detail}\nTrust score: ${res.score}/100\nReason codes: ${codes.join(', ')}\nTime: ${new Date().toLocaleString('en-IN')}`;
+      slot.innerHTML=`<div class="report">${esc(txt)}\n\nCall 1930 or file at <a href="https://cybercrime.gov.in" target="_blank" rel="noopener">cybercrime.gov.in</a></div><button class="btn alt" id="cp" type="button">Copy report</button>`;
+      slot.querySelector('#cp').onclick=()=>{ (navigator.clipboard?navigator.clipboard.writeText(txt):Promise.reject()).then(()=>toast('Report copied')).catch(()=>toast('Select the text to copy')); };
+    }
+  });
+  const ln=el.querySelector('.listen');
+  if(ln) ln.onclick=()=>{ try{ const u=new SpeechSynthesisUtterance(tt.ver[v]+'. '+tt.r[codes[0]]); u.lang={en:'en-IN',hi:'hi-IN',ta:'ta-IN',te:'te-IN'}[lang]; speechSynthesis.cancel(); speechSynthesis.speak(u);}catch(e){toast('Speech is not available here');} };
+  if(!silent) record(res,ctx,v);
+}
+function record(res,ctx,v){
+  stats.scan++; if(v!=='allow') stats.flag++; updStats();
+  last=res; hood(res);
+  logItems.unshift({k:ctx.kind,d:ctx.short,s:res.score,v}); logItems=logItems.slice(0,5);
+  $('#log').innerHTML=logItems.map(i=>`<li><span>${esc(i.k)}: ${esc(i.d)}</span><span class="pill v-${i.v}">${i.s}</span></li>`).join('');
+}
+function updStats(){ $('#n-scan').textContent=stats.scan; $('#n-flag').textContent=stats.flag; $('#n-block').textContent=stats.block; }
+function hood(res){
+  const t0=performance.now(); const lat=Math.max(1,Math.round(performance.now()-t0+ (res.ms||2)));
+  $('#mark').textContent=res.score; $('#mark').style.left=Math.min(96,Math.max(4,res.score))+'%';
+  $('#sig').innerHTML=(res.sg.length?res.sg.map(x=>`<tr><td>${SIGLABEL[x[0]]}</td><td>${x[1]}</td></tr>`).join(''):'<tr><td>No risk signals</td><td>0</td></tr>')+`<tr><td><b>Trust score</b></td><td><b>${res.score}</b></td></tr>`;
+  $('#m-lat').textContent='scored in '+lat+' ms (target <300 ms)'; $('#m-model').textContent=res.engine;
+  const ps=$$('#pipe div'); ps.forEach(p=>p.classList.remove('lit'));
+  ps.forEach((p,i)=>setTimeout(()=>p.classList.add('lit'),i*220));
+}
+let tt; function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('on'),2200);}
+
+/* ---------- tabs ---------- */
+function go(tab){ $$('.panel').forEach(p=>p.classList.toggle('on',p.id==='p-'+tab)); $$('.tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.tab===tab)); $('.scr').scrollTop=0; }
+$$('.tabs button').forEach(b=>b.onclick=()=>go(b.dataset.tab));
+$$('[data-go]').forEach(b=>b.onclick=()=>go(b.dataset.go));
+$('#lang').onchange=e=>{lang=e.target.value; ['upi','voice','link'].forEach(k=>{ if($('#'+k+'-out .verdict')){silent=true;rerun[k]();silent=false;} });};
+const rerun={};
+
+/* ---------- UPI ---------- */
+const UPI=[
+ {n:'Refund request',vpa:'refund.help9918273@okbank',amt:4999,type:'collect',note:'Refund for your cancelled order',known:false},
+ {n:'Cashback prize',vpa:'prize-desk4412887@ybl',amt:499,type:'collect',note:'Claim your cashback reward',known:false},
+ {n:'Friend pays',vpa:'meera.k@okhdfcbank',amt:350,type:'pay',note:'Lunch',known:true},
+ {n:'New shop QR',vpa:'chaiwala88123412@paytm',amt:120,type:'pay',note:'',known:false}];
+let utype='collect';
+function setType(t){utype=t;$('#ty-pay').setAttribute('aria-pressed',t==='pay');$('#ty-col').setAttribute('aria-pressed',t==='collect');}
+$('#ty-pay').onclick=()=>setType('pay'); $('#ty-col').onclick=()=>setType('collect');
+function loadUPI(i){ const p=UPI[i]; $('#vpa').value=p.vpa;$('#amt').value=p.amt;$('#note').value=p.note;$('#known').checked=p.known;setType(p.type);
+  $$('#upi-presets .chip').forEach((c,j)=>c.setAttribute('aria-pressed',i===j)); }
+$('#upi-presets').innerHTML=UPI.map((p,i)=>`<button class="chip" aria-pressed="false" data-i="${i}">${p.n}</button>`).join('');
+$$('#upi-presets .chip').forEach(c=>c.onclick=()=>loadUPI(+c.dataset.i));
+rerun.upi=()=>{ const d={vpa:$('#vpa').value.trim(),amount:+$('#amt').value||0,type:utype,note:$('#note').value,known:$('#known').checked};
+  const r=scoreUPI(d); render($('#upi-out'),r,{kind:'UPI '+d.type+' request',detail:`Rs ${d.amount} from ${d.vpa}`,short:`Rs ${d.amount} ${d.type}`}); };
+$('#upi-go').onclick=rerun.upi; loadUPI(0);
+$('#demo').onclick=()=>{ go('upi'); loadUPI(0); rerun.upi(); };
+
+/* ---------- Phishing ---------- */
+const LINK=[
+ {n:'Bank KYC',t:'URGENT: Your SBI account will be blocked today. Update KYC now: http://sbi-kyc-update.xyz/login'},
+ {n:'Parcel fee',t:'Your parcel is held at the depot. Pay Rs 25 fee to release it: bit.ly/3xK9pQ'},
+ {n:'Real statement',t:'Your HDFC Bank statement is ready. View it here: https://www.hdfcbank.com/statements'}];
+$('#link-presets').innerHTML=LINK.map((p,i)=>`<button class="chip" aria-pressed="false" data-i="${i}">${p.n}</button>`).join('');
+$$('#link-presets .chip').forEach(c=>c.onclick=()=>{ $('#msg').value=LINK[+c.dataset.i].t; $$('#link-presets .chip').forEach(x=>x.setAttribute('aria-pressed',x===c)); });
+$('#msg').value=LINK[0].t; $('#link-presets .chip').setAttribute('aria-pressed','true');
+rerun.link=()=>{ const t=$('#msg').value; const r=scorePhish(t); render($('#link-out'),r,{kind:'Suspicious message',detail:t.slice(0,120),short:t.slice(0,26)+'…'}); };
+$('#link-go').onclick=rerun.link;
+
+/* ---------- Voice ---------- */
+const VOICE=[
+ {n:'"Bank manager" call',p:.93,tr:'"This is the bank manager. Your card is blocked. Share the OTP right now."',f:[.08,.88,.15],urg:1},
+ {n:'"Papa" voice note',p:.87,tr:'"Papa, I am in trouble. Please send Rs 20,000 to this number today."',f:[.14,.79,.22],urg:1},
+ {n:'Mom on a call',p:.06,tr:'"Hello beta, did you reach home? Call me when you are free."',f:[.82,.21,.86],urg:0}];
+const FN=['Pitch jitter','Flatness','Phase match'];
+let vi=0, anim=0, prog=0;
+$('#voice-presets').innerHTML=VOICE.map((p,i)=>`<button class="chip" aria-pressed="${i===0}" data-i="${i}">${p.n}</button>`).join('');
+function pick(i){vi=i;$$('#voice-presets .chip').forEach((c,j)=>c.setAttribute('aria-pressed',i===j));$('#tr').textContent=VOICE[i].tr;prog=0;feat(0);draw(0);$('#voice-out').innerHTML='';}
+$$('#voice-presets .chip').forEach(c=>c.onclick=()=>pick(+c.dataset.i));
+function feat(k){ const f=VOICE[vi].f; $('#feat').innerHTML=f.map((v,i)=>`<div><span>${FN[i]}</span><span class="bar"><i style="width:${Math.round(v*100*k)}%"></i></span><span>${(v*k).toFixed(2)}</span></div>`).join(''); }
+function draw(p){
+  const c=$('#wave'),x=c.getContext('2d'),W=c.width,H=c.height,n=64,syn=VOICE[vi].p>.5;
+  x.clearRect(0,0,W,H); const cs=getComputedStyle(document.documentElement);
+  for(let i=0;i<n;i++){
+    const a=syn?0.45+0.12*Math.sin(i*0.9):0.15+0.75*Math.abs(Math.sin(i*0.37)*Math.cos(i*0.11+1))*(0.6+0.4*Math.sin(i*1.7));
+    const h=Math.max(4,a*H*0.9), done=i/n<p;
+    x.fillStyle=done?cs.getPropertyValue(syn?'--danger':'--ok'):cs.getPropertyValue('--line');
+    x.fillRect(i*(W/n)+2,(H-h)/2,W/n-5,h);
+  }
+}
+$('#voice-go').onclick=()=>{
+  cancelAnimationFrame(anim); const v=VOICE[vi], t0=performance.now(), dur=1800; $('#voice-out').innerHTML='';
+  const step=now=>{ prog=Math.min(1,(now-t0)/dur); draw(prog); feat(prog);
+    if(prog<1) anim=requestAnimationFrame(step); else done(); };
+  const done=()=>{ rerun.voice=()=>done(); const sg=[]; if(v.p>.5) sg.push(['synth',-Math.round(v.p*70)]); if(v.urg) sg.push(['urgency',-15]);
+    const r=fin(sg,'Voice Shield · canned sample (Wav2Vec2 anti-spoof planned)');
+    render($('#voice-out'),r,{kind:'Voice call',detail:`${v.n}, ${Math.round(v.p*100)}% synthetic`,short:v.n}); };
+  anim=requestAnimationFrame(step);
+};
+rerun.voice=()=>{};
+pick(0);
+try{ matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>draw(prog)); }catch(e){}
+})();
+</script>
+
+</body></html>
